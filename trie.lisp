@@ -16,38 +16,30 @@
 (defpackage :trie)
 ; (:use :cl)
 
-(setf *print-circle* t)
-
+(defparameter *print-circle* t)
+(defparameter *print-pretty* t)
 
 ; Struct node occupies 24 bits for slots and 16 for 1-char key = 40 bits
-(defstruct (trie (:type list) ; :named
-    )
-   (key "" :read-only t)   ; generic - could be :type char
-   (width 0 :type integer)
-   (branches nil :type list))  ; Could be hash
+(defstruct
+    (trie
+        (:type list)
+        ; :named
+        )
+    (key "" :read-only t)   ; generic - could be :type char
+    (width 0 :type integer)
+    (branches nil :type list))  ; Could a vector for optimization, but complicates things!
 
 (defun test ()
     (setf r (make-trie))
-    (add-seq r "blow")
-    (add-seq r "boa")
-    (add-seq r "blush"))
+    (add-seqs r '("blow" "boa" "blush")))
 
+; Sentence level
 
-(defun find-key (trie key)
-    "Return a symbol matching key from trie's branches."
-    (find key (trie-branches trie) :test #'equal :key (lambda (n) (trie-key n))))
+(defun add-seqs (trie seqs)
+    (mapcar #'(lambda (seq) (add-seq trie seq))
+        seqs))
 
-(defun add-key (trie key)
-    (push (setf symbol (make-trie :key key)) (trie-branches trie))
-    symbol)
-
-(defun remove-key (trie key)
-    (setf branches (trie-branches trie))
-    (let ((node (find-key trie key)))
-        (when node
-            (decf (trie-width node)) ; FIXME
-            (when (<= 0 trie-width node)
-                (setf branches (remove-if #'(lambda (x) (equal x key)) branches))))))
+; Word level
 
 (defun find-seq (trie seq)
     "Find a sequence from trie"
@@ -89,23 +81,107 @@
 ;             (return-from remove-seq nil))
 ;         (remove-seq symbol (subseq seq 1) count)))
 
-;; Traversal & printing
+; Node or symbol level
 
-(defun first-key (trie)
+(defun leafp (trie)
     (car (trie-branches trie)))
+
+(defun find-key (trie key)
+    "Return a symbol matching key from trie's branches."
+    (find key (trie-branches trie) :test #'equal :key (lambda (n) (trie-key n))))
+
+(defun add-key (trie key)
+    (push (setf node (make-trie :key key)) (trie-branches trie))
+    node)
+
+(defun add-key-let (trie key)
+    (let ((node (make-trie :key key)))
+        (push node (trie-branches trie))
+        (return-from add-key-let node)))
+
+(defun remove-key (trie key)
+    (let ((node (find-key trie key))
+          (branches (trie-branches trie)))
+        (when node
+            (decf (trie-width node)) ; FIXME
+            (when (<= 0 trie-width node)
+                (setf branches (remove-if #'(lambda (x) (equal x key)) branches))))))
+
+
+;; Traversal & printing
 
 ; (defmethod print-object ((object trie) stream)
 ;     (when *pretty-print* (format stream "~&~v@T" 2))
 ;     (format stream "(~S ~d" (trie-key trie) (trie-width trie))
-;     (when (first-key trie)
+;     (when (leafp trie)
 ;         (loop as branch in (trie-branches trie) do
 ;             (print branch)))
 ;     (format stream ")"))
 
+(defun pprint-trie (*standard-output* trie)
+    ; (format *standard-output* "~&")
+    (pprint-logical-block (*standard-output* trie :prefix "(" :suffix ")")
+        ; (format *standard-output* "~&")
+        ; Print key
+        (if (characterp (first trie))
+            (write-char (pprint-pop))
+            (write (pprint-pop)))
+        (write-char #\Space)
+        
+        ; Print width
+        (write (pprint-pop))
+        (pprint-indent :current 0)
+        
+        ; Branches
+        (if (leafp trie)
+            ; Has branches
+            (progn
+                ; (write-char #\Space)
+                (pprint-newline :mandatory)
+                ; (pprint-indent :current 4)
+                ; (pprint-tab :line 4 2)
+                ; (write :+)
+                ;(pprint-newline :mandatory)
+                
+                ; (pprint-tab :line 4 2)
+                ; (pprint-indent :current 8)
+                
+                ; Print list of Branches
+                ; (write-char #\Space)
+                ; (pprint-newline :miser)
+                
+                (loop as branch in (trie-branches trie) do
+                    (pprint-trie *standard-output* branch)
+                    (pprint-exit-if-list-exhausted))
+                )
+            ; Is leaf
+            (progn
+                (write :%)
+                ; (pprint-exit-if-list-exhausted)
+                ))
+        
+        ; Place between closing parens
+        ; (pprint-exit-if-list-exhausted)
+        
+        ; Extra after branches, before closing parens
+        ; (write :#)
+        )
+    (pprint-newline :mandatory)
+    )
+    
+    
+    (when *pretty-print* (format stream "~&~v@T" 2))
+    (format stream "(~S ~d" (trie-key trie) (trie-width trie))
+    (when (leafp trie)
+        (loop as branch in (trie-branches trie) do
+            (print branch)))
+    (format stream ")"))
+
 (defun print-trie (trie &optional (depth 0) &key (indent nil))
+    "Traverse tries printing out nodes"
     (when indent (format t "~&~v@T" (* depth 2)))
     (format t "(~S ~d" (trie-key trie) (trie-width trie))
-    (when (first-key trie)
+    (when (leafp trie)
         (loop as branch in (trie-branches trie) do
             (print-trie branch (+ 1 depth) :indent indent)))
     (format t ")"))
