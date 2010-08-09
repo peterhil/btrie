@@ -6,7 +6,7 @@
 ;;;     Peter Hillerström
 ;;; Version:
 ;;;     0.1
-;;; Initial Comon Lisp version:
+;;; Initial Common Lisp version:
 ;;;     2010-08-01
 ;;; 
 ;;; Features:
@@ -40,26 +40,25 @@
         ; Predicates
         :branchesp :leafp :wordp
         
-        ;; Init and slots
+        ; Init and slots
         :make-trie :trie-key :trie-width :trie-branches
         
-        ;; Insert, retrieve and remove (CRUD) operations
+        ; Insert, retrieve and remove (CRUD) operations
         :add-seq :add-seqs
         :find-key :find-seq
         
-        ;; Printing
+        ; Printing
         :pprint-trie :print-words
         
-        ;; Extras
-        :trie-prob :test-trie
-        )
+        ; Extras
+        :trie-prob :test-trie)
     (:use :cl))
 
 (in-package :ptrie)
 
-(defparameter *print-pretty* t)
-(defparameter *print-circle* t)
-(defparameter *debug* nil)
+(setq *print-pretty* t)
+(setq *print-circle* t)
+(setq *debug* nil)
 
 ;;; Initialization
 ;;;
@@ -106,8 +105,7 @@
     (when (zerop (length seq))
         (return-from find-seq trie))
     (let ((symbol (find-key trie (elt seq 0))))
-        (if (null symbol)
-            (return-from find-seq nil)
+        (when symbol
             (find-seq symbol (subseq seq 1)))))
 
 (defun find-key (trie key)
@@ -118,24 +116,24 @@
 ;;; Insertion
 
 (defun add-seqs (trie seqs)
-    (mapcar #'(lambda (seq) (add-seq trie seq))
-        seqs))
+    (mapcar #'(lambda (seq) (add-seq trie seq)) seqs))
 
 (defun add-seq (trie seq &optional (count 1))
     "Add a branch to the trie count times. If branch already exists, increase it’s width.
     A count below one is changed to one. Modifies trie in-place."
-    (when (< count 0) (error (format nil "Negative count ~A." count)))
+    (when (< count 0)
+        (error (format nil "Negative count ~A." count)))
     (incf (trie-width trie) count)
     (when (zerop (length seq))
         (add-key trie t count)
         (return-from add-seq trie))
     (let ((symbol (add-key trie (elt seq 0) 0)))
-        ; (add-key trie (elt seq 0) count)
         (add-seq symbol (subseq seq 1) count)))
 
 (defun add-key (trie key &optional (count 1))
     "Add a node to trie. If node exists, increases it’s width."
-    (when (< count 0) (error (format nil "Negative count ~A." count)))
+    (when (< count 0)
+        (error (format nil "Negative count ~A." count)))
     (let ((node (find-key trie key)))
         (if node
             (incf (trie-width node) count)
@@ -183,26 +181,34 @@
 ;                       (delete #\b (trie-branches r)
 ;                       :test #'equal
 ;                       :key (lambda (n) (trie-key n))))
-;             (remove-key trie (elt seq 0))
-;             (return-from remove-seq nil))
-;         (remove-seq symbol (subseq seq 1) count)))
+;                 (remove-key trie (elt seq 0))
+;                 (return-from remove-seq nil))
+;             (remove-seq symbol (subseq seq 1) count)))
 
 
 ;;; Probabilities
 
 (defun trie-prob (root suffix)
     "Returns probability of suffix on given trie."
-    (let ((root-width (trie-width root))
-          (node-width (or (trie-width (find-seq root suffix)) 0)))
-        (/ node-width root-width)))
+    (let ((node-width (or (trie-width (find-seq root suffix)) 0)))
+        (/ node-width (trie-width root))))
 
 
 ;;; Sorting
 
-; TODO
+;; #|TODO|#
 
 
 ;;; Traversal & printing
+;;;
+;;; Example of trie representation, for trie ROOT -> a -> (n s):
+;;; ("" 2 
+;;;     (a 2 
+;;;         (s 1 •) 
+;;;         (n 1 •)))
+;;; 
+;;; Or with raw argument: 
+;;; ("" 2 (a 2 (s 1 (T 1)) (n 1 (T 1))))
 
 (defun print-words (trie &optional (prefix "") start end &key (with-count))
     "## Prints words from the trie. Prints word counts after tab when over one.
@@ -216,7 +222,8 @@
     (loop as branch in (trie-branches trie) do
         (print-words branch
             (concatenate 'string prefix (format nil "~A" (trie-key trie)))))
-    (when (equal "" (trie-key trie)) (trie-width trie)))
+    (when (equal "" (trie-key trie))
+        (trie-width trie)))
 
 ; (defmethod print-object ((object trie) stream)
 ;     (when *print-pretty* (format stream "~&~v@T" 2))
@@ -227,88 +234,51 @@
 ;     (format stream ")"))
 
 (defun pprint-trie (*standard-output* trie &key (raw nil))
-    "Pretty print the trie.
-    
-    Example of representation, for trie ROOT -> a -> (n s):
-    ("" 2
-        (a 2
-           (s 1 •)
-           (n 1 •)))
-    
-    With raw argument: 
-    ("" 2 (a 2 (s 1 (T 1)) (n 1 (T 1))))
-    "
-    (setf *print-miser-width* nil)  ; Miser mode disables pprint-indent!
-    (pprint-logical-block (*standard-output* trie :prefix "(" :suffix ")")
-        ; Print key
-        (if (characterp (first trie))
-            (write-char (pprint-pop))
-            (write (pprint-pop)))
-        (write-char #\Space)
-        ; Print width
-        (pprint-indent :current 0)
-        (write (pprint-pop))
-        ; Branches
-        (if (branchesp trie)
-            ; Has branches
-            (progn
-                ; Print list of Branches
-                (write-char #\Space)
-                (when *debug* (write :+))
-                (loop as branch in (trie-branches trie) do
-                    (when *debug* (write :~))
-                    ; Word endings
-                    (when (and (not raw) (wordp trie))
-                        (write-char #\u2022)    ; Bullet
-                        (return))
-                    (pprint-newline :mandatory) ; THIS makes the newline after leaf!
-                    (pprint-indent :current 0)
-                    (pprint-trie *standard-output* branch :raw raw) ; Next level
-                    (pprint-exit-if-list-exhausted)                 ; Exit after leaf
-                    (when *debug* (write :*))
-                    )
-                (when *debug* (write :@))
-                )
-            ; Is leaf
-            (progn
-                (when *debug* (write :%))
-                (pprint-exit-if-list-exhausted)))))
+    "Pretty print the trie."
+    (let ((*print-miser-width* nil))  ; Miser mode disables pprint-indent!
+        (pprint-logical-block (*standard-output* trie :prefix "(" :suffix ")")
+            ; Print key
+            (if (characterp (first trie))
+                (write-char (pprint-pop))
+                (write (pprint-pop)))
+            (write-char #\Space)
+            ; Print width
+            (pprint-indent :current 0)
+            (write (pprint-pop))
+            ; Branches
+            (cond
+                ((branchesp trie)
+                    ; Print list of Branches
+                    (write-char #\Space)
+                    (when *debug* (write :+))
+                    (loop as branch in (trie-branches trie) do
+                        (when *debug* (write :~))
+                        ; Word endings
+                        (unless raw
+                            (when (wordp trie)          ; FIXME Prints extra bullets
+                                (write-char #\u2022))   ; Bullet
+                            (when (leafp branch) (return-from pprint-trie)))
+                        ; THIS makes the newline after leaf!
+                        (pprint-newline :mandatory)
+                        (pprint-indent :current 0)
+                        ; Next level
+                        (pprint-trie *standard-output* branch :raw raw)
+                        ; Exit after leaf
+                        (pprint-exit-if-list-exhausted)
+                        (when *debug* (write :*)))
+                    (when *debug* (write :@)))
+                (t ; Is leaf
+                    (when *debug* (write :%))
+                    (pprint-exit-if-list-exhausted))))))
 
-(defun print-trie (trie &optional (depth 0) &key (indent nil))
+(defun print-trie (trie &optional (depth 0) (indent 2))
     "Traverse tries printing out nodes"
-    (when indent (format t "~&~v@T" (* depth 2)))
+    (when indent (format t "~&~v@T" (* depth indent)))
     (format t "(~S ~d" (trie-key trie) (trie-width trie))
-    (when (leafp trie)
+    (when (branchesp trie)
         (loop as branch in (trie-branches trie) do
-            (print-trie branch (+ 1 depth) :indent indent)))
+            (print-trie branch (+ 1 depth) indent)))
     (format t ")"))
 
 
 
-; Macro versions of trie recursing functions - beware of bugs!
-; 
-; (defmacro wrap-recursion ((fn &rest args) &body body)
-;     `(funcall ,fn ,@args ,@body))
-; 
-; (defun recurse-trie (trie seq &rest body)
-;     "A macro to do operations on trie nodes following a sequence recursively.
-;     Provides key, symbol and suffix in addition to arguments. Returns if sequence is 
-;     empty, returning the current trie node. Otherwise needs a return-from form."
-;     (if (zerop (length seq))
-;         (return-from recurse-trie trie))
-;     (let* ((key (elt seq 0))
-;            (symbol (find-key trie key))
-;            (suffix (subseq seq 1)))
-;         (macroexpand `(,@body)) ; Might not work and even go into inf.loop when compiling!
-;         (recurse-trie symbol suffix)))
-; 
-; (defun find-seq! (trie seq)
-;     (wrap-recursion (#'recurse-trie trie seq)
-;         (unless symbol
-;             (return-from find-seq! nil))))
-; 
-; (defun add-seq! (trie seq)
-;     (wrap-recursion (#'recurse-trie trie seq)
-;         (unless symbol
-;             (setf symbol (add-key trie (elt seq 0))))
-;         (incf (trie-width symbol))))
