@@ -42,7 +42,7 @@
 (defpackage :ptrie
   (:export
     ; Predicates
-    :branchesp :leafp :wordp
+    :leafp :only-terminal-p :wordp
     
     ; Init and slots
     :make-trie :trie-key :trie-width :trie-branches
@@ -51,11 +51,16 @@
     :add-seq :add-seqs
     :find-key :find-seq
     
+    ; Sorting
+    :sort-trie :sort-trie-branch
+    
     ; Printing
     :pprint-trie :print-words
     
     ; Extras
-    :trie-prob :test-trie)
+    :trie-prob :test-trie
+    
+    *print-pretty* *print-circle*)
   (:use :cl))
 
 (in-package :ptrie)
@@ -64,8 +69,8 @@
 (setq *print-circle* t)
 (setq *debug* nil)
 
-(setf *boa* '(blow boa blush foo bar baz))
-(setf *banana* '(banana are an bare bane as c bar ar ban b barn))
+(defparameter *boa* '(blow boa blush foo bar baz))
+(defparameter *banana* '(banana are an bare bane as c bar ar ban b barn))
 
 ;;; Initialization
 ;;;
@@ -93,15 +98,18 @@
 
 ;;; Predicates
 
-(defun wordp (trie)
-  (find-key trie t))
+(defun leafp (node)
+  "Predicate to tell if there are no branches for a node."
+  (equal nil (trie-branches node)))
 
-(defun branchesp (trie)
-  ; TODO account for (t 1 nil) nodes for word endings
-  (car (trie-branches trie)))
+(defun wordp (node)
+  "Predicate to tell whether this node ends any words."
+  (find-key node t))
 
-(defun leafp (trie)
-  (not (branchesp trie)))
+(defun only-terminal-p (node)
+  "This predicate tells if node has only terminal as a child."
+  (and (= 1 (length (trie-branches node)))
+       (wordp node)))
 
 
 ;;; Retrieval
@@ -202,7 +210,23 @@
 
 ;;; Sorting
 
-;; #|TODO|#
+(defun sort-trie (trie predicate &key (key #'trie-key) (stable nil))
+  "Sort a trie recursively with a predicate function suitable for sorting."
+  (let ((root trie))
+    (sort-trie-branch root predicate :key key :stable stable)
+    (unless (leafp trie)
+      (loop as branch in (trie-branches root) do
+        (setf branch
+              (sort-trie branch predicate :key key :stable stable))))
+    root))
+
+(defun sort-trie-branch (trie predicate &key (key #'trie-key) (stable nil))
+  "Sort a trie node’s branches with a predicate function suitable for sorting."
+  (let ((branches (copy-list (trie-branches trie)))
+        (sort (if stable #'stable-sort #'sort)))
+    (setf (trie-branches trie)
+          (funcall sort branches predicate :key key))
+    trie))
 
 
 ;;; Traversal & printing
@@ -220,7 +244,7 @@
   "Traverse tries printing out nodes"
   (when indent (format t "~&~v@T" (* depth indent)))
   (format t "(~S ~d" (trie-key trie) (trie-width trie))
-  (when (branchesp trie)
+  (unless (leafp trie)
     (loop as branch in (trie-branches trie) do
       (print-trie branch (+ 1 depth) indent)))
   (format t ")"))
@@ -236,7 +260,7 @@
   * Implement start, end
   * Allow to specify separator insted of newline
   "
-  (when (leafp trie)
+  (when (only-terminal-p trie)
     (let ((width (trie-width trie)))
       ; Print the word and count if not in '(0 1).
       ; Logand changes 1 and 0 to 0 (and changes -1 to -2, but that’s not the point).
@@ -251,47 +275,51 @@
 ; (defmethod print-object ((object trie) stream)
 ;   (when *print-pretty* (format stream "~&~v@T" 2))
 ;   (format stream "(~S ~d" (trie-key trie) (trie-width trie))
-;   (when (branchesp trie)
+;   (unless (leafp trie)
 ;     (loop as branch in (trie-branches trie) do
 ;       (print branch)))
 ;   (format stream ")"))
 
-(defun pprint-trie (*standard-output* trie &key (raw nil))
+(defun pprint-trie (*standard-output* trie &key (compact t))
   "Pretty print the trie."
-  (let ((*print-miser-width* nil))  ; Miser mode disables pprint-indent!
-    (pprint-logical-block (*standard-output* trie :prefix "(" :suffix ")")
+  (pprint-logical-block (*standard-output* trie :prefix "(" :suffix ")")
+    (let ((*print-miser-width* nil)   ; Miser mode disables pprint-indent!
+          (key (pprint-pop)))
       ; Print key
-      (if (characterp (first trie))
-        (write-char (pprint-pop))
-        (write (pprint-pop)))
-      (write-char #\Space)
-      ; Print width
-      (pprint-indent :current 0)
-      (write (pprint-pop))
-      ; Branches
       (cond
-        ((branchesp trie)
-          ; Print list of Branches
-          (write-char #\Space)
-          (when *debug* (write :+))
-          (loop as branch in (trie-branches trie) do
-            (when *debug* (write :~))
-            ; Word endings
-            (unless raw
-              (when (wordp trie)      ; FIXME Prints extra bullets
-                (write-char #\u2022))   ; Bullet
-              (when (leafp branch) (return-from pprint-trie)))
-            ; THIS makes the newline after leaf!
-            (pprint-newline :mandatory)
-            (pprint-indent :current 0)
-            ; Next level
-            (pprint-trie *standard-output* branch :raw raw)
-            ; Exit after leaf
-            (pprint-exit-if-list-exhausted)
-            (when *debug* (write :*)))
-          (when *debug* (write :@)))
-        (t ; Is leaf
-          (when *debug* (write :%))
-          (pprint-exit-if-list-exhausted))))))
+        ((equal t key)    (write-char #\u2022))
+        ((characterp key) (write-char key))
+        (t                (write key)))
+      (write-char #\Space)
+      (pprint-indent :current 0)
+      
+      ; Print width
+      (write (pprint-pop))
+      
+      ; Word ending
+      (when (and compact (wordp trie))
+        (write-char #\Space)
+        (write-char #\u2022 #|Bullet|#))
+      
+      ; Branches
+      (let ((branches (pprint-pop)))
+        (when branches
+            (loop as branch in branches do
+              (unless (equal compact (car branch))    ; Return to previous level on leaf
+                (when *debug* (write :^))
+                (write-char #\Space)                  ; Space before branches
+                (unless (only-terminal-p trie)
+                  (pprint-newline :mandatory))        ; Newline after leaf
+                (pprint-indent :current 0)
+                ; (pprint-exit-if-list-exhausted)
+                (pprint-trie *standard-output* branch :compact compact)   ; Next level
+                (when *debug* (write :*)))
+                (when *debug* (write :$)))
+        (pprint-exit-if-list-exhausted))))))
+
+
+
+
+
 
 
