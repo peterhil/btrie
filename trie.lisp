@@ -7,7 +7,7 @@
 ;;; Author:
 ;;;   Peter Hillerström
 ;;; Version:
-;;;   0.1
+;;;   0.2
 ;;; Initial Common Lisp version:
 ;;;   2010-08-01
 ;;; 
@@ -60,15 +60,16 @@
     ; Extras
     :trie-prob :test-trie
     
-    *print-pretty* *print-circle*)
+    *print-pretty* *print-circle* *boa* *banana*)
   (:use :cl))
 
 (in-package :ptrie)
 
 (setq *print-pretty* t)
 (setq *print-circle* t)
-(setq *debug* nil)
+(setq *print-level* 12)
 
+(defparameter *debug* nil)
 (defparameter *boa* '(blow boa blush foo bar baz))
 (defparameter *banana* '(banana are an bare bane as c bar ar ban b barn))
 
@@ -82,9 +83,12 @@
 ;;; Linked cons cells:  3 * cons (8 bits) = 24 bits
 ;;; Class:        16 for class, 20 for vector = 36 bits
 
-(defstruct (trie (:type list))
+(defstruct
+  (trie 
+    (:print-object bprint-trie))
+    ; (:type list))
   "Trie data structure, see package documentation for more info."
-  (key "" :read-only t)     ; Generic type -- could be :type char
+  (key "" :read-only t)       ; Generic type -- could be :type char
   (width 0 :type integer)
   (branches nil :type list))  ; Could a vector for optimization, but complicates things!
 
@@ -92,7 +96,6 @@
   "Simple utility function to build a test trie."
   (let ((r (make-trie)))
     (add-seqs r (mapcar #'(lambda (s) (string-downcase (string s))) lst))
-    (pprint-trie t r)
     r))
 
 
@@ -161,13 +164,22 @@
 
 ;;; Removal
 
-; (defun remove-key (trie key &optional (count 1))
-;   "### Remove a node from trie. If node exists, decrease it’s width.
-;   
-;   1. Find if key exist.
-;   2. Decrease it's width when is less than or equal to count.
-;   3. If width is 0, remove node into new trie to be returned."
-;   nil)
+(defun remove-node (trie key)
+  (let ((node (find-key trie key)))
+    (setf (trie-branches trie)
+          (remove node (trie-branches trie)))
+    node))
+
+(defun remove-key (trie key &optional (count 1))
+  "### Remove a node from trie. If node exists, decrease it’s width."
+  ; 1. Find if key exist.
+  (let ((node (find-key trie key)))
+    (when (and node (>= (trie-width node) count))
+      ; 2. Decrease it's width when is less than or equal to count.
+      (decf (trie-width node) count)
+      ; 3. If width is 0, remove node into new trie to be returned.
+      (when (equal 0 (trie-width node))
+        (remove-node node key)))))
 
 ; (defun remove-key-broken (trie key)
 ;   "###"
@@ -240,17 +252,10 @@
 ;;; Or with raw argument: 
 ;;; ("" 2 (a 2 (s 1 (T 1)) (n 1 (T 1))))
 
-(defun print-trie (trie &optional (depth 0) (indent 2))
-  "Traverse tries printing out nodes"
-  (when indent (format t "~&~v@T" (* depth indent)))
-  (format t "(~S ~d" (trie-key trie) (trie-width trie))
-  (unless (leafp trie)
-    (loop as branch in (trie-branches trie) do
-      (print-trie branch (+ 1 depth) indent)))
-  (format t ")"))
+;; TODO Sliding window macro!
 
-(defun print-words (trie &optional (prefix "") start end &key (with-count))
-  "## Prints words from the trie, one per line.
+(defun print-words (trie &optional (stream t) (prefix "")) ; start end &key (with-count))
+  "# Prints words from the trie, one per line.
   
   Options:
   * with-count: Prints word counts after tab when over one.
@@ -258,30 +263,41 @@
   TODO:
   * Use keyword arguments?
   * Implement start, end
-  * Allow to specify separator insted of newline
-  "
-  (when (only-terminal-p trie)
+  * Allow to specify separator insted of newline"
+  
+  (when (leafp trie)
     (let ((width (trie-width trie)))
       ; Print the word and count if not in '(0 1).
       ; Logand changes 1 and 0 to 0 (and changes -1 to -2, but that’s not the point).
       (format t "~A~:[~;~10t~d~]~%" prefix (/= 0 (logand -2 width)) width))
     (return-from print-words))
   (loop as branch in (trie-branches trie) do
-    (print-words branch
+    (print-words branch stream
       (concatenate 'string prefix (format nil "~A" (trie-key trie)))))
   (when (equal "" (trie-key trie))
     (trie-width trie)))
 
-; (defmethod print-object ((object trie) stream)
-;   (when *print-pretty* (format stream "~&~v@T" 2))
-;   (format stream "(~S ~d" (trie-key trie) (trie-width trie))
+; (defmethod print-object ((trie trie) stream)
+;   ; (when *print-pretty* (format stream "~&~v@T" 2))
+;   (format stream "(~A ~d" (trie-key trie) (trie-width trie))
 ;   (unless (leafp trie)
 ;     (loop as branch in (trie-branches trie) do
-;       (print branch)))
-;   (format stream ")"))
+;       (write-char #\Space stream)
+;       (write branch :stream stream)))
+;   (format stream ")")
+;   (when (leafp trie) (format stream "~%")))
 
-(defun pprint-trie (*standard-output* trie &key (compact t))
-  "Pretty print the trie."
+(defun print-trie (trie &optional (stream t) (depth 0) (indent 2))
+  "## Traverse tries printing out nodes"
+  (when indent (format stream "~&~v@T" (* depth indent)))
+  (format stream "(~A ~d" (trie-key trie) (trie-width trie))
+  (unless (leafp trie)
+    (loop as branch in (trie-branches trie) do
+      (print-trie branch stream (+ 1 depth) indent)))
+  (format stream ")"))
+
+(defun pprint-trie (trie &optional (stream t) (compact t))
+  "Pretty print the trie. Works when structure type is list."
   (pprint-logical-block (*standard-output* trie :prefix "(" :suffix ")")
     (let ((*print-miser-width* nil)   ; Miser mode disables pprint-indent!
           (key (pprint-pop)))
@@ -311,15 +327,41 @@
                 (unless (only-terminal-p trie)
                   (pprint-newline :mandatory))        ; Newline after leaf
                 (pprint-indent :current 0)
-                ; (pprint-exit-if-list-exhausted)
-                (pprint-trie *standard-output* branch :compact compact)   ; Next level
+                (pprint-trie branch stream compact)   ; Next level
                 (when *debug* (write :*)))
                 (when *debug* (write :$)))
         (pprint-exit-if-list-exhausted))))))
 
-
-
-
+(defun bprint-trie (trie &optional (stream t) (depth 0) (compact t))
+  "## Pretty print the trie. Works with structure types."
+  (let ((*standard-output* stream)
+        (key (trie-key trie)))
+    
+    ; Indent and write opening parens
+    (format stream "~v@T" (* 2 depth))
+    (write-char #\u28 #|Left Paren|# )
+    
+    ; Print key
+    (cond
+      ((equal t key)    (write-char #\u2022))
+      ((characterp key) (write-char key))
+      (t                (write key)))
+    (write-char #\Space)
+    
+    ; Print width
+    (write (trie-width trie))
+    
+    ; Word ending
+    (when (and compact (wordp trie))
+          (write-char #\Space)
+          (write-char #\u2022 #|Bullet|#))
+    
+    ; Branches
+    (loop as branch in (trie-branches trie) do
+      (unless (leafp branch)
+        (format stream "~%") ; (write-char #\Newline)
+        (bprint-trie branch stream (+ 1 depth) compact))
+      (write-char #\u29 #|Right Paren|# ))))
 
 
 
