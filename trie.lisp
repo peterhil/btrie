@@ -40,27 +40,40 @@
 ;;; ------------------------------------------------------------------------------------
 
 (defpackage :ptrie
-  (:export
-    ; Predicates
-    :leafp :only-terminal-p :wordp
+  (:export  ; Init and slots
+            :make-trie
+            :trie-key
+            :trie-width
+            :trie-branches
     
-    ; Init and slots
-    :make-trie :trie-key :trie-width :trie-branches
+            ; Insert, retrieve and remove (CRUD) operations
+            :add-seq
+            :add-seqs
+            :find-key
+            :find-seq
     
-    ; Insert, retrieve and remove (CRUD) operations
-    :add-seq :add-seqs
-    :find-key :find-seq
+            ; Sorting
+            :sort-trie
+            :sort-trie-branch
     
-    ; Sorting
-    :sort-trie :sort-trie-branch
+            ; Printing
+            :pprint-trie
+            :print-words
     
-    ; Printing
-    :pprint-trie :print-words
-    
-    ; Extras
-    :trie-prob :test-trie
-    
-    *print-pretty* *print-circle* *boa* *banana*)
+            ; Predicates
+            :leafp
+            :only-terminal-p
+            :wordp
+            
+            ; Extras
+            :trie-prob
+            :test-trie
+            
+            ; Variables
+            *print-pretty*
+            *print-circle*
+            *boa*
+            *banana*)
   (:use :cl))
 
 (in-package :ptrie)
