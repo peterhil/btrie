@@ -140,8 +140,27 @@
 
 (defun find-key (trie key)
   "Return a symbol matching key from trie's branches."
-  (find key (trie-branches trie) :test #'equal :key (lambda (n) (trie-key n))))
+  (find key (trie-branches trie) :test #'equal :key #'trie-key))
 
+(defun sym-interval (trie key)
+  "Return interval limits for a symbol matching key. Nil if key not found."
+  (when (find-key trie key)
+    (let* ((node (find-key trie key))
+           (low (sym-low trie key))
+           (high (+ low (/ (trie-width node)
+                           (trie-width trie)))))
+        (values low high))))
+
+(defun sym-low (trie key)
+  "Return a cumulative lower limit for a symbol matching key. Nil if key not found."
+  (when (find-key trie key)
+        (/  (loop for b in (trie-branches trie)
+                  for k = (trie-key b)
+                  and w = (trie-width b)
+                  until (equal k key) summing w)
+            (trie-width trie))))
+  ; Same cum-sum loop for assoc lists:
+  ; (loop for (k . v) in al until (equal #\b key) summing v))
 
 ;;; Insertion
 
@@ -229,8 +248,9 @@
 
 (defun trie-prob (root suffix)
   "Returns probability of suffix on given trie."
-  (let ((node-width (or (trie-width (find-seq root suffix)) 0)))
-    (/ node-width (trie-width root))))
+  (let ((node (find-seq root suffix)))
+    (when node
+      (/ (trie-width node) (trie-width root)))))
 
 
 ;;; Sorting
