@@ -1,8 +1,8 @@
 ;;; -*- Mode: Lisp; Syntax: Common-Lisp; Package: ptrie -*-
 ;;;
-;;; ------------------------------------------------------------------------------------
+;;; -------------------------------------------------------------------------
 ;;; P-TRIE - probability trie (with branch widths)
-;;; ------------------------------------------------------------------------------------
+;;; -------------------------------------------------------------------------
 ;;;
 ;;; Author:
 ;;;   Peter Hillerström
@@ -12,32 +12,37 @@
 ;;;   2010-08-01
 ;;; 
 ;;; Features:
+;;; 
 ;;;   This trie implementation has an original idea of “branch width”
-;;;   invented by Peter Hillerström on 14 of November 2008.
-;;;   Branch width of a trie node tells how many branches go through that node.
+;;;   invented by Peter Hillerström on 14 of November 2008. Branch width
+;;;   of a trie node tells how many branches go through that node.
 ;;;   Widths can be used to calculate probabilites for different suffixes.
 ;;; 
 ;;; Notes about this implementation:
-;;;   * P-trie is implemented recursively, so ‘trie’ can mean the whole tree 
-;;;     or a single node on a trie.
+;;; 
+;;;   * P-trie is implemented recursively, so ‘trie’ can mean the whole 
+;;;     tree or a single node on a trie.
 ;;;   * Keys can be sequences of any type.
 ;;;   * IMPORTANT: All functions are destructive, for efficiently handling 
 ;;;     large data sets. There will be non-destructive versions of functions.
 ;;; 
 ;;; About tries generally:
-;;;   Trie, or prefix tree, is an ordered tree data structure that is used to store 
-;;;   an associative array where the keys are usually strings. Unlike a binary search 
-;;;   tree, no node in the tree stores the whole key associated with that node;;; 
-;;;   instead, its position in the tree shows what key it is associated with.
+;;; 
+;;;   Trie, or prefix tree, is an ordered tree data structure that is used 
+;;;   to store an associative array where the keys are usually strings.
+;;; 
+;;;   Unlike a binary search tree, no node in the tree stores the whole key 
+;;;   associated with that node instead, its position in the tree shows 
+;;;   what key it is associated with.
 ;;;   
-;;;   All the descendants of a node have a common prefix of the string associated 
-;;;   with that node, and the root is associated with the empty string.
-;;;   Looking up a key of length m takes worst case O(m) time.
+;;;   All the descendants of a node have a common prefix of the string 
+;;;   associated with that node, and the root is associated with the empty 
+;;;   string. Looking up a key of length m takes worst case O(m) time.
 ;;;   
 ;;;   More information about tries:
 ;;;   http://en.wikipedia.org/wiki/Trie
 ;;;
-;;; ------------------------------------------------------------------------------------
+;;; -------------------------------------------------------------------------
 
 (defpackage :ptrie
   (:export  ; Init and slots
@@ -103,7 +108,7 @@
   "Trie data structure, see package documentation for more info."
   (key "" :read-only t)       ; Generic type -- could be :type char
   (width 0 :type integer)
-  (branches nil :type list))  ; Could a vector for optimization, but complicates things!
+  (branches nil :type list))  ; Could a vector, but it complicates things!
 
 (defun test-trie (&optional (lst *banana*))
   "Simple utility function to build a test trie."
@@ -143,7 +148,8 @@
   (find key (trie-branches trie) :test #'equal :key #'trie-key))
 
 (defun sym-interval (trie key)
-  "Return interval limits for a symbol matching key. Nil if key not found."
+  "Return interval limits for a symbol matching key.
+  Nil if key not found."
   (when (find-key trie key)
     (let* ((node (find-key trie key))
            (low (sym-low trie key))
@@ -152,7 +158,8 @@
         (values low high))))
 
 (defun sym-low (trie key)
-  "Return a cumulative lower limit for a symbol matching key. Nil if key not found."
+  "Return a cumulative lower limit for a symbol matching key.
+  Nil if key not found."
   (when (find-key trie key)
         (/  (loop for b in (trie-branches trie)
                   for k = (trie-key b)
@@ -168,8 +175,9 @@
   (mapcar #'(lambda (seq) (add-seq trie seq)) seqs))
 
 (defun add-seq (trie seq &optional (count 1))
-  "Add a branch to the trie count times. If branch already exists, increase it’s width.
-  A count below one is changed to one. Modifies trie in-place."
+  "Add a branch to the trie count times. Modifies trie in-place.
+  If branch already exists, increase it’s width.
+  A count below one is changed to one."
   (when (< count 0)
     (error (format nil "Negative count ~A." count)))
   (incf (trie-width trie) count)
@@ -213,16 +221,6 @@
       (when (equal 0 (trie-width node))
         (remove-node node key)))))
 
-; (defun remove-key-broken (trie key)
-;   "###"
-;   (let ((node (find-key trie key))
-;       (branches (trie-branches trie)))
-;     (when node
-;       (decf (trie-width node)) ; FIXME
-;       (when (<= 0 trie-width node)
-;         (setf branches (remove-if #'(lambda (x) (equal x key)) branches))))))
-
-
 ; (defun remove-seq (trie seq &optional (count 1))
 ;   "### Remove a sequence from trie"
 ;   (unless (find-seq trie seq)
@@ -256,7 +254,7 @@
 ;;; Sorting
 
 (defun sort-trie (trie predicate &key (key #'trie-key) (stable nil))
-  "Sort a trie recursively with a predicate function suitable for sorting."
+  "Sort a trie recursively with a predicate function."
   (let ((root trie))
     (sort-trie-branch root predicate :key key :stable stable)
     (unless (leafp trie)
@@ -266,7 +264,7 @@
     root))
 
 (defun sort-trie-branch (trie predicate &key (key #'trie-key) (stable nil))
-  "Sort a trie node’s branches with a predicate function suitable for sorting."
+  "Sort a trie node’s branches with a predicate function."
   (let ((branches (copy-list (trie-branches trie)))
         (sort (if stable #'stable-sort #'sort)))
     (setf (trie-branches trie)
@@ -287,7 +285,8 @@
 
 ;; TODO Sliding window macro!
 
-(defun print-words (trie &optional (stream t) (prefix "")) ; start end &key (with-count))
+(defun print-words (trie &optional (stream t) (prefix ""))
+  ; Could use more arguments: start end &key (with-count))
   "# Prints words from the trie, one per line.
   
   Options:
@@ -301,7 +300,8 @@
   (when (leafp trie)
     (let ((width (trie-width trie)))
       ; Print the word and count if not in '(0 1).
-      ; Logand changes 1 and 0 to 0 (and changes -1 to -2, but that’s not the point).
+      ; Logand changes 1 and 0 to 0 (and changes -1 to -2, 
+      ; but that’s not the point).
       (format t "~A~:[~;~10t~d~]~%" prefix (/= 0 (logand -2 width)) width))
     (return-from print-words))
   (loop as branch in (trie-branches trie) do
@@ -354,7 +354,7 @@
       (let ((branches (pprint-pop)))
         (when branches
             (loop as branch in branches do
-              (unless (equal compact (car branch))    ; Return to previous level on leaf
+              (unless (equal compact (car branch))    ; Else previous level
                 (when *debug* (write :^))
                 (write-char #\Space)                  ; Space before branches
                 (unless (only-terminal-p trie)
