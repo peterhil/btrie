@@ -1,15 +1,14 @@
-;;; -*- Mode: Lisp; Syntax: Common-Lisp; Package: ptrie -*-
 ;;;
 ;;; -------------------------------------------------------------------------
-;;; P-TRIE - probability trie (with branch widths)
+;;; Twist - P-TRIE - probability trie (with branch widths)
 ;;; -------------------------------------------------------------------------
 ;;;
-;;; Author:
-;;;   Peter Hillerström
-;;; Version:
-;;;   0.2
-;;; Initial Common Lisp version:
-;;;   2010-08-01
+;;; Copyright (c) 2010 Peter Hillerström, All Rights Reserved
+;;; 
+;;; Version:  0.2
+;;; Initial Common Lisp version:  2010-08-01
+;;; 
+;;; -------------------------------------------------------------------------
 ;;; 
 ;;; Features:
 ;;; 
@@ -42,46 +41,8 @@
 ;;;   More information about tries:
 ;;;   http://en.wikipedia.org/wiki/Trie
 ;;;
-;;; -------------------------------------------------------------------------
 
-(defpackage :ptrie
-  (:export  ; Init and slots
-            :make-trie
-            :trie-key
-            :trie-width
-            :trie-branches
-    
-            ; Insert, retrieve and remove (CRUD) operations
-            :add-seq
-            :add-seqs
-            :find-key
-            :find-seq
-    
-            ; Sorting
-            :sort-trie
-            :sort-trie-branch
-    
-            ; Printing
-            :pprint-trie
-            :print-words
-    
-            ; Predicates
-            :leafp
-            :only-terminal-p
-            :wordp
-            
-            ; Extras
-            :trie-prob
-            :test-trie
-            
-            ; Variables
-            *print-pretty*
-            *print-circle*
-            *boa*
-            *banana*)
-  (:use :cl))
-
-(in-package :ptrie)
+(in-package #:twist)
 
 (setq *print-pretty* t)
 (setq *print-circle* t)
@@ -113,7 +74,7 @@
 (defun test-trie (&optional (lst *banana*))
   "Simple utility function to build a test trie."
   (let ((r (make-trie)))
-    (add-seqs r (mapcar #'(lambda (s) (string-downcase (string s))) lst))
+    (trie-add-seqs r (mapcar #'(lambda (s) (string-downcase (string s))) lst))
     r))
 
 
@@ -171,10 +132,10 @@
 
 ;;; Insertion
 
-(defun add-seqs (trie seqs)
-  (mapcar #'(lambda (seq) (add-seq trie seq)) seqs))
+(defun trie-add-seqs (trie seqs)
+  (mapcar #'(lambda (seq) (trie-add-seq trie seq)) seqs))
 
-(defun add-seq (trie seq &optional (count 1))
+(defun trie-add-seq (trie seq &optional (count 1))
   "Add a branch to the trie count times. Modifies trie in-place.
   If branch already exists, increase it’s width.
   A count below one is changed to one."
@@ -182,12 +143,12 @@
     (error (format nil "Negative count ~A." count)))
   (incf (trie-width trie) count)
   (when (zerop (length seq))
-    (add-key trie t count)
-    (return-from add-seq trie))
-  (let ((symbol (add-key trie (elt seq 0) 0)))
-    (add-seq symbol (subseq seq 1) count)))
+    (trie-add-key trie t count)
+    (return-from trie-add-seq trie))
+  (let ((symbol (trie-add-key trie (elt seq 0) 0)))
+    (trie-add-seq symbol (subseq seq 1) count)))
 
-(defun add-key (trie key &optional (count 1))
+(defun trie-add-key (trie key &optional (count 1))
   "Add a node to trie. If node exists, increases it’s width."
   (when (< count 0)
     (error (format nil "Negative count ~A." count)))
@@ -372,7 +333,7 @@
     
     ; Indent and write opening parens
     (format stream "~v@T" (* 2 depth))
-    (write-char #\u28 #|Left Paren|# )
+    (write-char #\( #|Left Paren|# )
     
     ; Print key
     (cond
@@ -394,7 +355,7 @@
       (unless (leafp branch)
         (format stream "~%") ; (write-char #\Newline)
         (bprint-trie branch stream (+ 1 depth) compact))
-      (write-char #\u29 #|Right Paren|# ))))
+      (write-char #\) #|Right Paren|#))))
 
 
 
