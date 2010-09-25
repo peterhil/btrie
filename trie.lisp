@@ -96,16 +96,16 @@
 
 ;;; Retrieval
 
-(defun find-seq (trie seq)
-  "Find a sequence from trie"
+(defun obtain-seq (trie seq)
+  "Get a sequence from trie by following the keys in the sequence."
   (when (zerop (length seq))
-    (return-from find-seq trie))
+    (return-from obtain-seq trie))
   (let ((symbol (find-key trie (elt seq 0))))
     (when symbol
-      (find-seq symbol (subseq seq 1)))))
+      (obtain-seq symbol (subseq seq 1)))))
 
 (defun find-key (trie key)
-  "Return a symbol matching key from trie's branches."
+  "Get a symbol matching key from trie's branches."
   (find key (trie-branches trie) :test #'equal :key #'trie-key))
 
 (defun sym-interval (trie key)
@@ -184,7 +184,7 @@
 
 ; (defun remove-seq (trie seq &optional (count 1))
 ;   "### Remove a sequence from trie"
-;   (unless (find-seq trie seq)
+;   (unless (obtain-seq trie seq)
 ;     (return-from remove-seq nil))
 ;   (decf (trie-width trie) (max count 1))
 ;   (when (zerop (length seq))
@@ -207,7 +207,7 @@
 
 (defun trie-prob (root suffix)
   "Returns probability of suffix on given trie."
-  (let ((node (find-seq root suffix)))
+  (let ((node (obtain-seq root suffix)))
     (when node
       (/ (trie-width node) (trie-width root)))))
 
