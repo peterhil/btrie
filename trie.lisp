@@ -132,10 +132,10 @@
 
 ;;; Insertion
 
-(defun trie-add-seqs (trie seqs)
-  (mapcar #'(lambda (seq) (trie-add-seq trie seq)) seqs))
+(defmethod add-seqs ((trie trie) (seqs list) &optional (count 1))
+  (mapcar #'(lambda (seq) (add trie seq count)) seqs))
 
-(defun trie-add-seq (trie seq &optional (count 1))
+(defmethod add ((trie trie) (seq sequence) &optional (count 1))
   "Add a branch to the trie count times. Modifies trie in-place.
   If branch already exists, increase it’s width.
   A count below one is changed to one."
@@ -143,12 +143,12 @@
     (error (format nil "Negative count ~A." count)))
   (incf (trie-width trie) count)
   (when (zerop (length seq))
-    (trie-add-key trie t count)
-    (return-from trie-add-seq trie))
-  (let ((symbol (trie-add-key trie (elt seq 0) 0)))
-    (trie-add-seq symbol (subseq seq 1) count)))
+    (add-key trie t count)
+    (return-from add trie))
+  (let ((symbol (add-key trie (elt seq 0) 0)))
+    (add symbol (subseq seq 1) count)))
 
-(defun trie-add-key (trie key &optional (count 1))
+(defmethod add-key ((trie trie) key &optional (count 1))
   "Add a node to trie. If node exists, increases it’s width."
   (when (< count 0)
     (error (format nil "Negative count ~A." count)))
