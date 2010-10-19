@@ -74,7 +74,7 @@
 (defun test-trie (&optional (lst *banana*))
   "Simple utility function to build a test trie."
   (let ((r (make-trie)))
-    (trie-add-seqs r (mapcar #'(lambda (s) (string-downcase (string s))) lst))
+    (add-seqs r (mapcar #'(lambda (s) (string-downcase (string s))) lst))
     r))
 
 
@@ -118,7 +118,7 @@
                            (trie-width trie)))))
         (values low high))))
 
-(defun sym-low (trie key)
+(defmethod sym-low ((trie trie) key)
   "Return a cumulative lower limit for a symbol matching key.
   Nil if key not found."
   (when (find-key trie key)
