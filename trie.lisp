@@ -1,3 +1,4 @@
+;;; -*- Mode:Lisp; Syntax:ANSI-Common-Lisp; Coding:utf-8 -*-
 ;;;
 ;;; -------------------------------------------------------------------------
 ;;; Twist - P-TRIE - probability trie (with branch widths)
@@ -47,6 +48,11 @@
 (setq *print-pretty* t)
 (setq *print-circle* t)
 (setq *print-level* 12)
+
+#-sbcl
+(defparameter +word-marker+ #\+) ; SBCL + swank causes problems with UTF-8
+#+sbcl
+(defparameter +word-marker+ #\u2022) ; • Bullet
 
 (defparameter *debug* nil)
 (defparameter *boa* '(blow boa blush foo bar baz))
@@ -297,7 +303,7 @@
           (key (pprint-pop)))
       ; Print key
       (cond
-        ((equal t key)    (write-char #\u2022))
+        ((equal t key)    (write-char +word-marker+))
         ((characterp key) (write-char key))
         (t                (write key)))
       (write-char #\Space)
@@ -309,7 +315,7 @@
       ; Word ending
       (when (and compact (wordp trie))
         (write-char #\Space)
-        (write-char #\u2022 #|Bullet|#))
+        (write-char +word-marker+))
       
       ; Branches
       (let ((branches (pprint-pop)))
@@ -337,7 +343,7 @@
     
     ; Print key
     (cond
-      ((equal t key)    (write-char #\u2022))
+      ((equal t key)    (write-char +word-marker+))
       ((characterp key) (write-char key))
       (t                (write key)))
     (write-char #\Space)
@@ -348,7 +354,7 @@
     ; Word ending
     (when (and compact (wordp trie))
           (write-char #\Space)
-          (write-char #\u2022 #|Bullet|#))
+          (write-char +word-marker+))
     
     ; Branches
     (loop as branch in (trie-branches trie) do
