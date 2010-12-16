@@ -43,15 +43,15 @@
 ;;;   http://en.wikipedia.org/wiki/Trie
 ;;;
 
-(in-package #:twist)
+(in-package #:prodigy-logic)
 
-(setq *print-pretty* t)
+;(setq *print-pretty* t)
 (setq *print-circle* t)
 (setq *print-level* 12)
 
-#-sbcl
-(defparameter +word-marker+ #\+) ; SBCL + swank causes problems with UTF-8
 #+sbcl
+(defparameter +word-marker+ #\t) ; SBCL + swank causes problems with UTF-8
+#-sbcl
 (defparameter +word-marker+ #\u2022) ; • Bullet
 
 (defparameter *debug* nil)
@@ -68,14 +68,25 @@
 ;;; Linked cons cells:  3 * cons (8 bits) = 24 bits
 ;;; Class:        16 for class, 20 for vector = 36 bits
 
-(defstruct
-  (trie 
-    (:print-object bprint-trie))
-    ; (:type list))
-  "Trie data structure, see package documentation for more info."
-  (key "" :read-only t)       ; Generic type -- could be :type char
-  (width 0 :type integer)
-  (branches nil :type list))  ; Could a vector, but it complicates things!
+(defclass trie ()
+  ((key
+    :initform ""
+    :reader key
+    :initarg :key
+    :type atom #|Equal to (not cons) |#
+    ;:type character #|Could be :type char|# 
+    :documentation "Can be any type for generality.")
+   (width
+    :initform 0
+    :accessor width
+    :initarg :width
+    :type (integer 0 *))
+   (branches
+    :initform nil
+    :accessor branches
+    :initarg :branches
+    :type list #|Could a vector, but it complicates things!|# ))
+  (:documentation "Trie data structure, see package documentation for more info."))  
 
 (defun test-trie (&optional (lst *banana*))
   "Simple utility function to build a test trie."
@@ -83,12 +94,15 @@
     (add-seqs r (mapcar #'(lambda (s) (string-downcase (string s))) lst))
     r))
 
+(defun make-trie (&key (key "") (width 0) branches)
+  "Utility function to make a trie instance."
+  (make-instance 'trie :key key :width width :branches branches))
 
 ;;; Predicates
 
 (defun leafp (node)
   "Predicate to tell if there are no branches for a node."
-  (equal nil (trie-branches node)))
+  (equal nil (branches node)))
 
 (defun wordp (node)
   "Predicate to tell whether this node ends any words."
@@ -96,13 +110,13 @@
 
 (defun only-terminal-p (node)
   "This predicate tells if node has only terminal as a child."
-  (and (= 1 (length (trie-branches node)))
+  (and (= 1 (length (branches node)))
        (wordp node)))
 
 
 ;;; Retrieval
 
-(defun obtain-seq (trie seq)
+(defmethod obtain-seq ((trie trie) (seq sequence))
   "Get a sequence from trie by following the keys in the sequence."
   (when (zerop (length seq))
     (return-from obtain-seq trie))
@@ -110,29 +124,29 @@
     (when symbol
       (obtain-seq symbol (subseq seq 1)))))
 
-(defun find-key (trie key)
+(defmethod find-key ((trie trie) key)
   "Get a symbol matching key from trie's branches."
-  (find key (trie-branches trie) :test #'equal :key #'trie-key))
+  (find key (branches trie) :test #'equal :key #'key))
 
-(defun sym-interval (trie key)
+(defmethod sym-interval ((trie trie) key)
   "Return interval limits for a symbol matching key.
   Nil if key not found."
   (when (find-key trie key)
     (let* ((node (find-key trie key))
            (low (sym-low trie key))
-           (high (+ low (/ (trie-width node)
-                           (trie-width trie)))))
+           (high (+ low (/ (width node)
+                           (width trie)))))
         (values low high))))
 
 (defmethod sym-low ((trie trie) key)
   "Return a cumulative lower limit for a symbol matching key.
   Nil if key not found."
   (when (find-key trie key)
-        (/  (loop for b in (trie-branches trie)
-                  for k = (trie-key b)
-                  and w = (trie-width b)
+        (/  (loop for b in (branches trie)
+                  for k = (key b)
+                  and w = (width b)
                   until (equal k key) summing w)
-            (trie-width trie))))
+            (width trie))))
   ; Same cum-sum loop for assoc lists:
   ; (loop for (k . v) in al until (equal #\b key) summing v))
 
@@ -147,7 +161,7 @@
   A count below one is changed to one."
   (when (< count 0)
     (error (format nil "Negative count ~A." count)))
-  (incf (trie-width trie) count)
+  (incf (width trie) count)
   (when (zerop (length seq))
     (add-key trie t count)
     (return-from add trie))
@@ -160,50 +174,50 @@
     (error (format nil "Negative count ~A." count)))
   (let ((node (find-key trie key)))
     (if node
-      (incf (trie-width node) count)
+      (incf (width node) count)
       (setq node (create-node trie key count)))
     node))
 
-(defun create-node (trie key &optional (count 0))
+(defmethod create-node ((trie trie) key &optional (count 0))
   "Destructively adds node to trie"
-  (car (push (make-trie :key key :width count) (trie-branches trie))))
+  (car (push (make-trie :key key :width count) (branches trie))))
 
 
 ;;; Removal
 
-(defun remove-node (trie key)
+(defmethod remove-node ((trie trie) key)
   (let ((node (find-key trie key)))
-    (setf (trie-branches trie)
-          (remove node (trie-branches trie)))
+    (setf (branches trie)
+          (remove node (branches trie)))
     node))
 
-(defun remove-key (trie key &optional (count 1))
+(defmethod remove-key ((trie trie) key &optional (count 1))
   "### Remove a node from trie. If node exists, decrease it’s width."
   ; 1. Find if key exist.
   (let ((node (find-key trie key)))
-    (when (and node (>= (trie-width node) count))
+    (when (and node (>= (width node) count))
       ; 2. Decrease it's width when is less than or equal to count.
-      (decf (trie-width node) count)
+      (decf (width node) count)
       ; 3. If width is 0, remove node into new trie to be returned.
-      (when (equal 0 (trie-width node))
+      (when (equal 0 (width node))
         (remove-node node key)))))
 
 ; (defun remove-seq (trie seq &optional (count 1))
 ;   "### Remove a sequence from trie"
 ;   (unless (obtain-seq trie seq)
 ;     (return-from remove-seq nil))
-;   (decf (trie-width trie) (max count 1))
+;   (decf (width trie) (max count 1))
 ;   (when (zerop (length seq))
 ;     (return-from remove-seq trie))
 ;   ; Use loop instead of recursion?
 ;   (let ((symbol (find-key trie (elt seq 0))))
 ;     (if symbol
-;       (when (= count (trie-width symbol))
+;       (when (= count (width symbol))
 ;         ; Remove subtrie
-;         (setf (trie-branches r)
-;             (delete #\b (trie-branches r)
+;         (setf (branches r)
+;             (delete #\b (branches r)
 ;             :test #'equal
-;             :key (lambda (n) (trie-key n))))
+;             :key (lambda (n) (key n))))
 ;         (remove-key trie (elt seq 0))
 ;         (return-from remove-seq nil))
 ;       (remove-seq symbol (subseq seq 1) count)))
@@ -211,31 +225,29 @@
 
 ;;; Probabilities
 
-(defun trie-prob (root suffix)
+(defmethod trie-prob ((root trie) suffix)
   "Returns probability of suffix on given trie."
   (let ((node (obtain-seq root suffix)))
     (when node
-      (/ (trie-width node) (trie-width root)))))
+      (/ (width node) (width root)))))
 
 
 ;;; Sorting
-
-(defun sort-trie (trie predicate &key (key #'trie-key) (stable nil))
+(defun sort-trie (trie predicate &rest args &key (key #'key) (stable nil))
   "Sort a trie recursively with a predicate function."
   (let ((root trie))
-    (sort-trie-branch root predicate :key key :stable stable)
+    (apply #'sort-trie-branch root predicate args)
     (unless (leafp trie)
-      (loop as branch in (trie-branches root) do
+      (loop as branch in (branches root) do
         (setf branch
-              (sort-trie branch predicate :key key :stable stable))))
+              (apply #'sort-trie branch predicate args))))
     root))
 
-(defun sort-trie-branch (trie predicate &key (key #'trie-key) (stable nil))
+(defun sort-trie-branch (trie predicate &key (key #'key) (stable nil))
   "Sort a trie node’s branches with a predicate function."
-  (let ((branches (copy-list (trie-branches trie)))
+  (let ((branches (copy-list (branches trie)))
         (sort (if stable #'stable-sort #'sort)))
-    (setf (trie-branches trie)
-          (funcall sort branches predicate :key key))
+    (setf (branches trie) (funcall sort branches predicate :key key))
     trie))
 
 
@@ -265,38 +277,38 @@
   * Allow to specify separator insted of newline"
   
   (when (leafp trie)
-    (let ((width (trie-width trie)))
+    (let ((width (width trie)))
       ; Print the word and count if not in '(0 1).
       ; Logand changes 1 and 0 to 0 (and changes -1 to -2, 
       ; but that’s not the point).
       (format t "~A~:[~;~10t~d~]~%" prefix (/= 0 (logand -2 width)) width))
     (return-from print-words))
-  (loop as branch in (trie-branches trie) do
+  (loop as branch in (branches trie) do
     (print-words branch stream
-      (concatenate 'string prefix (format nil "~A" (trie-key trie)))))
-  (when (equal "" (trie-key trie))
-    (trie-width trie)))
+      (concatenate 'string prefix (format nil "~A" (key trie)))))
+  (when (equal "" (key trie))
+    (width trie)))
 
 ; (defmethod print-object ((trie trie) stream)
 ;   ; (when *print-pretty* (format stream "~&~v@T" 2))
-;   (format stream "(~A ~d" (trie-key trie) (trie-width trie))
+;   (format stream "(~A ~d" (key trie) (width trie))
 ;   (unless (leafp trie)
-;     (loop as branch in (trie-branches trie) do
+;     (loop as branch in (branches trie) do
 ;       (write-char #\Space stream)
 ;       (write branch :stream stream)))
 ;   (format stream ")")
 ;   (when (leafp trie) (format stream "~%")))
 
-(defun print-trie (trie &optional (stream t) (depth 0) (indent 2))
+(defun print-trie-simple (trie &optional (stream t) (depth 0) (indent 2))
   "## Traverse tries printing out nodes"
   (when indent (format stream "~&~v@T" (* depth indent)))
-  (format stream "(~A ~d" (trie-key trie) (trie-width trie))
+  (format stream "(~A ~d" (key trie) (width trie))
   (unless (leafp trie)
-    (loop as branch in (trie-branches trie) do
+    (loop as branch in (branches trie) do
       (print-trie branch stream (+ 1 depth) indent)))
   (format stream ")"))
 
-(defun pprint-trie (trie &optional (stream t) (compact t))
+(defun print-list-trie (trie &optional (stream t) (compact t))
   "Pretty print the trie. Works when structure type is list."
   (pprint-logical-block (*standard-output* trie :prefix "(" :suffix ")")
     (let ((*print-miser-width* nil)   ; Miser mode disables pprint-indent!
@@ -332,12 +344,15 @@
                 (when *debug* (write :$)))
         (pprint-exit-if-list-exhausted))))))
 
-(defun bprint-trie (trie &optional (stream t) (depth 0) (compact t))
-  "## Pretty print the trie. Works with structure types."
+(defmethod print-object ((trie trie) stream)
+  (print-trie-to-stream trie stream))
+
+(defmethod print-trie-to-stream ((trie trie) stream &optional (depth 0) (compact t))
+  "Pretty print the trie."
   (let ((*standard-output* stream)
-        (key (trie-key trie)))
+        (key (key trie)))
     
-    ; Indent and write opening parens
+    ; Indent and write opaening parens
     (format stream "~v@T" (* 2 depth))
     (write-char #\( #|Left Paren|# )
     
@@ -349,7 +364,7 @@
     (write-char #\Space)
     
     ; Print width
-    (write (trie-width trie))
+    (write (width trie))
     
     ; Word ending
     (when (and compact (wordp trie))
@@ -357,11 +372,35 @@
           (write-char +word-marker+))
     
     ; Branches
-    (loop as branch in (trie-branches trie) do
+    (loop as branch in (branches trie) do
       (unless (leafp branch)
         (format stream "~%") ; (write-char #\Newline)
-        (bprint-trie branch stream (+ 1 depth) compact))
+        (print-trie-to-stream branch stream (+ 1 depth) compact))
       (write-char #\) #|Right Paren|#))))
 
 
+(defmethod walker ((trie trie) (seq sequence) (fun function))
+  "### Walk the trie with key perfoming function on found node. TODO? Almost same as obtain-seq!
 
+    function walker(word, trie, method) {
+        if (!word || !trie || !method) return null;
+        var ch, c, l, i, prev;
+        
+        while (word.length > 0) {
+            ch = word.charAt(0),
+            c  = trie.children,
+            l  = c.length,
+            i  = 0;
+            for (; i < l; ++i) {
+                if (ch == c[i].stem)
+                    break;
+            }
+            if (i == l)
+                return null; // not found
+            word = word.substring(1),
+            prev = trie,
+            trie = c[i];
+        }
+        return method(prev, i);
+    }
+")
