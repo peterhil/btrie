@@ -43,7 +43,7 @@
 ;;;   http://en.wikipedia.org/wiki/Trie
 ;;;
 
-(in-package #:prodigy-logic)
+(in-package #:twist)
 
 ;(setq *print-pretty* t)
 (setq *print-circle* t)
