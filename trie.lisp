@@ -1,58 +1,73 @@
-;;; -*- Mode:Lisp; Syntax:ANSI-Common-Lisp; Coding:utf-8 -*-
+;;; -*- coding: utf-8; mode: Lisp; syntax: ANSI-Common-Lisp -*-
 ;;;
 ;;; -------------------------------------------------------------------------
 ;;; Twist - P-TRIE - probability trie (with branch widths)
 ;;; -------------------------------------------------------------------------
 ;;;
-;;; Copyright (c) 2010 Peter Hillerström, All Rights Reserved
-;;; 
+;;; Copyright (c) 2010 Peter Hillerström
+;;;
+;;; Permission is hereby granted, free of charge, to any person obtaining a
+;;; a copy of this software and associated documentation files (the "Software"),
+;;; to deal in the Software without restriction, including without limitation
+;;; the rights to use, copy, modify, merge, publish, distribute, sublicense,
+;;; and/or sell copies of the Software, and to permit persons to whom
+;;; the Software is furnished to do so, subject to the following conditions:
+;;;
+;;; The above copyright notice and this permission notice shall be included
+;;; in all copies or substantial portions of the Software.
+;;;
+;;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+;;; OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;;; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+;;; THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;;; LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+;;; FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+;;; IN THE SOFTWARE.
+;;;
 ;;; Version:  0.2
 ;;; Initial Common Lisp version:  2010-08-01
-;;; 
+;;;
 ;;; -------------------------------------------------------------------------
-;;; 
+;;;
 ;;; Features:
-;;; 
+;;;
 ;;;   This trie implementation has an original idea of “branch width”
 ;;;   invented by Peter Hillerström on 14 of November 2008. Branch width
 ;;;   of a trie node tells how many branches go through that node.
 ;;;   Widths can be used to calculate probabilites for different suffixes.
-;;; 
-;;; Notes about this implementation:
-;;; 
-;;;   * P-trie is implemented recursively, so ‘trie’ can mean the whole 
+;;;
+;;; Notes about this implementation
+;;;
+;;;   * P-trie is implemented recursively, so ‘trie’ can mean the whole
 ;;;     tree or a single node on a trie.
 ;;;   * Keys can be sequences of any type.
-;;;   * IMPORTANT: All functions are destructive, for efficiently handling 
+;;;   * IMPORTANT: All functions are destructive, for efficiently handling
 ;;;     large data sets. There will be non-destructive versions of functions.
-;;; 
+;;;
 ;;; About tries generally:
-;;; 
-;;;   Trie, or prefix tree, is an ordered tree data structure that is used 
+;;;
+;;;   Trie, or prefix tree, is an ordered tree data structure that is used
 ;;;   to store an associative array where the keys are usually strings.
-;;; 
-;;;   Unlike a binary search tree, no node in the tree stores the whole key 
-;;;   associated with that node instead, its position in the tree shows 
+;;;
+;;;   Unlike a binary search tree, no node in the tree stores the whole key
+;;;   associated with that node instead, its position in the tree shows
 ;;;   what key it is associated with.
-;;;   
-;;;   All the descendants of a node have a common prefix of the string 
-;;;   associated with that node, and the root is associated with the empty 
+;;;
+;;;   All the descendants of a node have a common prefix of the string
+;;;   associated with that node, and the root is associated with the empty
 ;;;   string. Looking up a key of length m takes worst case O(m) time.
-;;;   
+;;;
 ;;;   More information about tries:
 ;;;   http://en.wikipedia.org/wiki/Trie
 ;;;
 
 (in-package #:twist)
 
-;(setq *print-pretty* t)
+(setq *print-pretty* t)
 (setq *print-circle* t)
 (setq *print-level* 12)
 
-#+sbcl
-(defparameter +word-marker+ #\t) ; SBCL + swank causes problems with UTF-8
-#-sbcl
-(defparameter +word-marker+ #\u2022) ; • Bullet
+(defparameter +word-marker+ #\t) ; SBCL + swank causes problems with UTF-8 with bullets
 
 (defparameter *debug* nil)
 (defparameter *boa* '(blow boa blush foo bar baz))
@@ -70,23 +85,24 @@
 
 (defclass trie ()
   ((key
+    ;; Type could be character or char for strings
+    :type atom ; atom is equal to (not cons)
     :initform ""
     :reader key
     :initarg :key
-    :type atom #|Equal to (not cons) |#
-    ;:type character #|Could be :type char|# 
     :documentation "Can be any type for generality.")
    (width
+    :type (integer 0 *)
     :initform 0
     :accessor width
-    :initarg :width
-    :type (integer 0 *))
+    :initarg :width)
    (branches
+    ;; Type could a vector, but it complicates things!
+    :type list
     :initform nil
     :accessor branches
-    :initarg :branches
-    :type list #|Could a vector, but it complicates things!|# ))
-  (:documentation "Trie data structure, see package documentation for more info."))  
+    :initarg :branches))
+  (:documentation "Trie data structure, see package documentation for more info."))
 
 (defun test-trie (&optional (lst *banana*))
   "Simple utility function to build a test trie."
@@ -152,8 +168,32 @@
 
 ;;; Insertion
 
+(defun subseqs (seq length)
+  (loop for start from 0 to (- (length seq) length)
+     collect (subseq seq start (+ start length))))
+
+(defun interleave (seq num-parts)
+  (cond ((zerop num-parts) nil)
+	((> num-parts (length seq)) (warn "Can't interleave a sequence ~a into ~d parts" seq num-parts))
+	(t (cut-sequence seq (1- num-parts)))))
+
+(defun cut-sequence (seq times)
+  (cond ((zerop times) seq)
+	((<= 1 times (1- (length seq)))
+	 (let ((sub-length (- (length seq) times)))
+	   (arnesi:map-range (lambda (start) (subseq seq start (+ start sub-length))) 0 times)))
+	(t (warn "Can't cut a sequence ~a ~d times" seq times))))
+
 (defmethod add-seqs ((trie trie) (seqs list) &optional (count 1))
-  (mapcar #'(lambda (seq) (add trie seq count)) seqs))
+  (map 'list ;(typecase (elt seqs 0) (list 'list) (sequence 'sequence) (t 'list))
+       (lambda (seq) (add trie seq count))
+       seqs))
+
+(defmethod add-seqs-as-keys ((trie trie) (seqs sequence) &optional (count 1))
+  (map (type-of seqs) (lambda (seq) (add trie seq count)) seqs))
+
+(defmethod add-subseqs ((trie trie) (seq sequence) (len integer))
+  (mapcar (lambda (s) (add trie s)) (subseqs seq len)))
 
 (defmethod add ((trie trie) (seq sequence) &optional (count 1))
   "Add a branch to the trie count times. Modifies trie in-place.
@@ -202,6 +242,7 @@
       (when (equal 0 (width node))
         (remove-node node key)))))
 
+; Does not work
 ; (defun remove-seq (trie seq &optional (count 1))
 ;   "### Remove a sequence from trie"
 ;   (unless (obtain-seq trie seq)
@@ -254,12 +295,12 @@
 ;;; Traversal & printing
 ;;;
 ;;; Example of trie representation, for trie ROOT -> a -> (n s):
-;;; ("" 2 
-;;;   (a 2 
-;;;     (s 1 •) 
+;;; ("" 2
+;;;   (a 2
+;;;     (s 1 •)
 ;;;     (n 1 •)))
-;;; 
-;;; Or with raw argument: 
+;;;
+;;; Or with raw argument:
 ;;; ("" 2 (a 2 (s 1 (T 1)) (n 1 (T 1))))
 
 ;; TODO Sliding window macro!
@@ -267,19 +308,19 @@
 (defun print-words (trie &optional (stream t) (prefix ""))
   ; Could use more arguments: start end &key (with-count))
   "# Prints words from the trie, one per line.
-  
+
   Options:
   * with-count: Prints word counts after tab when over one.
-  
+
   TODO:
   * Use keyword arguments?
   * Implement start, end
   * Allow to specify separator insted of newline"
-  
+
   (when (leafp trie)
     (let ((width (width trie)))
       ; Print the word and count if not in '(0 1).
-      ; Logand changes 1 and 0 to 0 (and changes -1 to -2, 
+      ; Logand changes 1 and 0 to 0 (and changes -1 to -2,
       ; but that’s not the point).
       (format t "~A~:[~;~10t~d~]~%" prefix (/= 0 (logand -2 width)) width))
     (return-from print-words))
@@ -320,15 +361,15 @@
         (t                (write key)))
       (write-char #\Space)
       (pprint-indent :current 0)
-      
+
       ; Print width
       (write (pprint-pop))
-      
+
       ; Word ending
       (when (and compact (wordp trie))
         (write-char #\Space)
         (write-char +word-marker+))
-      
+
       ; Branches
       (let ((branches (pprint-pop)))
         (when branches
@@ -351,41 +392,41 @@
   "Pretty print the trie."
   (let ((*standard-output* stream)
         (key (key trie)))
-    
-    ; Indent and write opaening parens
+
+    ; Indent and write opening parens
     (format stream "~v@T" (* 2 depth))
-    (write-char #\( #|Left Paren|# )
-    
+    (write-char #\( ) ; <- Left parenthesis character!
+
     ; Print key
     (cond
       ((equal t key)    (write-char +word-marker+))
       ((characterp key) (write-char key))
       (t                (write key)))
     (write-char #\Space)
-    
+
     ; Print width
     (write (width trie))
-    
+
     ; Word ending
     (when (and compact (wordp trie))
           (write-char #\Space)
           (write-char +word-marker+))
-    
+
     ; Branches
     (loop as branch in (branches trie) do
-      (unless (leafp branch)
-        (format stream "~%") ; (write-char #\Newline)
-        (print-trie-to-stream branch stream (+ 1 depth) compact))
-      (write-char #\) #|Right Paren|#))))
-
+         (unless (leafp branch)
+           (format stream "~%") ; (write-char #\Newline)
+           (print-trie-to-stream branch stream (+ 1 depth) compact))
+         (write-char #\) )))) ; <- Right Parenthesis character!
 
 (defmethod walker ((trie trie) (seq sequence) (fun function))
-  "### Walk the trie with key perfoming function on found node. TODO? Almost same as obtain-seq!
+  "Walk the trie with key perfoming function on found node. TODO? Almost same as obtain-seq!
 
+   Use following JS snippet as a guide:
     function walker(word, trie, method) {
         if (!word || !trie || !method) return null;
         var ch, c, l, i, prev;
-        
+
         while (word.length > 0) {
             ch = word.charAt(0),
             c  = trie.children,
