@@ -1,67 +1,62 @@
 ;;; -*- coding: utf-8; mode: Lisp; syntax: ANSI-Common-Lisp -*-
 ;;;
 ;;; -------------------------------------------------------------------------
-;;; Twist - P-TRIE - probability trie (with branch widths)
+;;; Branch trie - a generic trie implementation with branch widths
 ;;; -------------------------------------------------------------------------
 ;;;
-;;; Copyright (c) 2010 Peter Hillerström
+;;; Copyright (c) 2010 Peter Hillerström, All Rights Reserved
 ;;;
-;;; Permission is hereby granted, free of charge, to any person obtaining a
-;;; a copy of this software and associated documentation files (the "Software"),
-;;; to deal in the Software without restriction, including without limitation
-;;; the rights to use, copy, modify, merge, publish, distribute, sublicense,
-;;; and/or sell copies of the Software, and to permit persons to whom
-;;; the Software is furnished to do so, subject to the following conditions:
+;;; Redistribution and use in source and binary forms, with or without
+;;; modification, are permitted provided that the following conditions
+;;; are met:
 ;;;
-;;; The above copyright notice and this permission notice shall be included
-;;; in all copies or substantial portions of the Software.
+;;;   * Redistributions of source code must retain the above copyright
+;;;     notice, this list of conditions and the following disclaimer.
 ;;;
-;;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-;;; OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-;;; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-;;; THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-;;; LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-;;; FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
-;;; IN THE SOFTWARE.
+;;;   * Redistributions in binary form must reproduce the above
+;;;     copyright notice, this list of conditions and the following
+;;;     disclaimer in the documentation and/or other materials
+;;;     provided with the distribution.
 ;;;
-;;; Version:  0.2
-;;; Initial Common Lisp version:  2010-08-01
-;;;
-;;; -------------------------------------------------------------------------
-;;;
-;;; Features:
-;;;
-;;;   This trie implementation has an original idea of “branch width”
-;;;   invented by Peter Hillerström on 14 of November 2008. Branch width
-;;;   of a trie node tells how many branches go through that node.
-;;;   Widths can be used to calculate probabilites for different suffixes.
-;;;
-;;; Notes about this implementation
-;;;
-;;;   * P-trie is implemented recursively, so ‘trie’ can mean the whole
-;;;     tree or a single node on a trie.
-;;;   * Keys can be sequences of any type.
-;;;   * IMPORTANT: All functions are destructive, for efficiently handling
-;;;     large data sets. There will be non-destructive versions of functions.
-;;;
-;;; About tries generally:
-;;;
-;;;   Trie, or prefix tree, is an ordered tree data structure that is used
-;;;   to store an associative array where the keys are usually strings.
-;;;
-;;;   Unlike a binary search tree, no node in the tree stores the whole key
-;;;   associated with that node instead, its position in the tree shows
-;;;   what key it is associated with.
-;;;
-;;;   All the descendants of a node have a common prefix of the string
-;;;   associated with that node, and the root is associated with the empty
-;;;   string. Looking up a key of length m takes worst case O(m) time.
-;;;
-;;;   More information about tries:
-;;;   http://en.wikipedia.org/wiki/Trie
+;;; THIS SOFTWARE IS PROVIDED BY THE AUTHOR 'AS IS' AND ANY EXPRESSED
+;;; OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+;;; WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+;;; ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY
+;;; DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+;;; DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+;;; GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+;;; INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+;;; WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+;;; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+;;; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ;;;
 
-(in-package #:twist)
+(in-package #:cl-user)
+
+(defpackage #:nu.composed.btrie
+  (:documentation "Branch trie - an implementation of tries with branch widths.")
+  (:nicknames :btrie)
+  (:use :cl :arnesi :lift)
+  (:export #:+word-marker+
+           #:make-trie
+           #:trie-key
+           #:trie-width
+           #:trie-branches
+           #:leafp
+           #:only-terminal-p
+           #:wordp
+           #:add
+           #:add-seqs
+           #:add-seqs-as-keys
+           #:add-subseqs
+           #:find-key
+           #:find-seq
+           #:sort-trie
+           #:sort-trie-branch
+           #:test-trie
+           #:trie-prob))
+
+(in-package #:nu.composed.btrie)
 
 (setq *print-pretty* t)
 (setq *print-circle* t)
@@ -274,7 +269,7 @@
 
 
 ;;; Sorting
-(defun sort-trie (trie predicate &rest args &key (key #'key) (stable nil))
+(defun sort-trie (trie predicate &rest args)
   "Sort a trie recursively with a predicate function."
   (let ((root trie))
     (apply #'sort-trie-branch root predicate args)
@@ -346,7 +341,7 @@
   (format stream "(~A ~d" (key trie) (width trie))
   (unless (leafp trie)
     (loop as branch in (branches trie) do
-      (print-trie branch stream (+ 1 depth) indent)))
+      (print-trie-simple branch stream (+ 1 depth) indent)))
   (format stream ")"))
 
 (defun print-list-trie (trie &optional (stream t) (compact t))
@@ -380,7 +375,7 @@
                 (unless (only-terminal-p trie)
                   (pprint-newline :mandatory))        ; Newline after leaf
                 (pprint-indent :current 0)
-                (pprint-trie branch stream compact)   ; Next level
+                (print-list-trie branch stream compact)   ; Next level
                 (when *debug* (write :*)))
                 (when *debug* (write :$)))
         (pprint-exit-if-list-exhausted))))))
