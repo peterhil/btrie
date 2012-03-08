@@ -17,6 +17,6 @@
   :components ((:file "btrie")))
 
 (defsystem btrie-tests
-  :depends-on (:btrie :lift)
+  :depends-on (:btrie :lift :metabang-bind)
   :serial t
   :components ((:file "tests")))

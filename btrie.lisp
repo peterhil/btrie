@@ -38,35 +38,42 @@
   (:nicknames :btrie)
   (:use :cl :arnesi :lift)
   (:export #:+word-marker+
+           #:trie
+           #:key
+           #:width
+           #:branches
+           #:make-node
+           #:make-leaf
            #:make-trie
+           #:make-word-trie
            #:trie-key
            #:trie-width
            #:trie-branches
            #:leafp
            #:only-terminal-p
            #:wordp
+           #:nodes-equalp
            #:add
            #:add-seqs
            #:add-seqs-as-keys
            #:add-subseqs
            #:find-key
-           #:find-seq
+           #:obtain-seq
            #:sort-trie
            #:sort-trie-branch
            #:test-trie
-           #:trie-prob))
+           #:trie-prob
+           #:print-words
+           #:traverse2))
 
 (in-package #:nu.composed.btrie)
 
 (setq *print-pretty* t)
-(setq *print-circle* t)
+(setq *print-circle* nil)
 (setq *print-level* 12)
 
 (defparameter +word-marker+ #\t) ; SBCL + swank causes problems with UTF-8 with bullets
-
 (defparameter *debug* nil)
-(defparameter *boa* '(blow boa blush foo bar baz))
-(defparameter *banana* '(banana are an bare bane as c bar ar ban b barn))
 
 ;;; Initialization
 ;;;
@@ -99,15 +106,30 @@
     :initarg :branches))
   (:documentation "Trie data structure, see package documentation for more info."))
 
-(defun test-trie (&optional (lst *banana*))
-  "Simple utility function to build a test trie."
-  (let ((r (make-trie)))
-    (add-seqs r (mapcar #'(lambda (s) (string-downcase (string s))) lst))
+(defun make-node (&key (key "") (width 0) (branches nil) (leaf nil))
+  "Utility function to make a trie instance."
+  (if leaf
+      (make-instance 'trie :key key :width width :branches '(nil))
+      (make-instance 'trie :key key :width width :branches branches)))
+
+(defun make-leaf (&key (width 1))
+  (make-node :key t :width width))
+
+(defun make-trie-with-fn (&optional (fn #'add-seqs) (seqs nil))
+  "Simple utility function to build a trie from a sequence."
+  (let ((r (make-node)))
+    (funcall fn r (map 'list #'(lambda (s) (string-downcase (string s))) seqs))
     r))
 
-(defun make-trie (&key (key "") (width 0) branches)
-  "Utility function to make a trie instance."
-  (make-instance 'trie :key key :width width :branches branches))
+(defun make-trie (&optional (seqs nil))
+  "Make a trie with letters as keys."
+  (make-trie-with-fn #'add-seqs seqs))
+
+(defun make-word-trie (seqs)
+  "Make a test trie with words as keys."
+  (let ((r (make-node)))
+    (add-seqs-as-keys r seqs)
+    r))
 
 ;;; Predicates
 
@@ -124,6 +146,11 @@
   (and (= 1 (length (branches node)))
        (wordp node)))
 
+(defun nodes-equalp (a b)
+  (and
+   (equal (key a) (key b))
+   (equal (width a) (width b))
+   (equal (branches a) (branches b))))
 
 ;;; Retrieval
 
@@ -180,7 +207,7 @@
 	(t (warn "Can't cut a sequence ~a ~d times" seq times))))
 
 (defmethod add-seqs ((trie trie) (seqs list) &optional (count 1))
-  (map 'list ;(typecase (elt seqs 0) (list 'list) (sequence 'sequence) (t 'list))
+  (map 'list
        (lambda (seq) (add trie seq count))
        seqs))
 
@@ -215,7 +242,7 @@
 
 (defmethod create-node ((trie trie) key &optional (count 0))
   "Destructively adds node to trie"
-  (car (push (make-trie :key key :width count) (branches trie))))
+  (car (push (make-node :key key :width count) (branches trie))))
 
 
 ;;; Removal
@@ -410,33 +437,15 @@
     ; Branches
     (loop as branch in (branches trie) do
          (unless (leafp branch)
-           (format stream "~%") ; (write-char #\Newline)
+           (format stream "~%") ; Newline if necessary
            (print-trie-to-stream branch stream (+ 1 depth) compact))
          (write-char #\) )))) ; <- Right Parenthesis character!
 
-(defmethod walker ((trie trie) (seq sequence) (fun function))
-  "Walk the trie with key perfoming function on found node. TODO? Almost same as obtain-seq!
-
-   Use following JS snippet as a guide:
-    function walker(word, trie, method) {
-        if (!word || !trie || !method) return null;
-        var ch, c, l, i, prev;
-
-        while (word.length > 0) {
-            ch = word.charAt(0),
-            c  = trie.children,
-            l  = c.length,
-            i  = 0;
-            for (; i < l; ++i) {
-                if (ch == c[i].stem)
-                    break;
-            }
-            if (i == l)
-                return null; // not found
-            word = word.substring(1),
-            prev = trie,
-            trie = c[i];
-        }
-        return method(prev, i);
-    }
-")
+(defmethod traverse ((trie trie) (fun function) &key (do-leafs nil))
+  "Traverse the trie perfoming function on each node."
+  (when (leafp trie)
+    (return-from traverse (when do-leafs (funcall fun trie))))
+  (loop as node in (branches trie) do
+       (progn
+         (funcall fun trie)
+         (traverse node fun))))
