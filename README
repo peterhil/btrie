@@ -18,7 +18,6 @@ Notes about this implementation
   * Generic: Keys can be sequences of any type.
   * IMPORTANT: All functions are destructive, for efficiently handling
     large data sets. There will be non-destructive versions of functions.
-  * TODO: Bit tries using bit-vectors
 
 About tries generally:
 
@@ -36,3 +35,9 @@ About tries generally:
   More information about tries:
   http://en.wikipedia.org/wiki/Trie
 
+Todo:
+
+  - Removal of sequences
+  - Merging (union) of several tries and other set operations like intersection
+  - Sliding window to keep at most n sequences in the trie
+  - Bit tries using bit-vectors

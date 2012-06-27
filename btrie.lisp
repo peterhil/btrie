@@ -4,7 +4,7 @@
 ;;; Branch trie - a generic trie implementation with branch widths
 ;;; -------------------------------------------------------------------------
 ;;;
-;;; Copyright (c) 2010 Peter Hillerström, All Rights Reserved
+;;; Copyright (c) 2010-2012 Peter Hillerström, All Rights Reserved
 ;;;
 ;;; Redistribution and use in source and binary forms, with or without
 ;;; modification, are permitted provided that the following conditions
@@ -34,37 +34,39 @@
 (in-package #:cl-user)
 
 (defpackage #:nu.composed.btrie
-  (:documentation "Branch trie - an implementation of tries with branch widths.")
+  (:documentation "Branch trie – an implementation of tries with branch widths.")
   (:nicknames :btrie)
   (:use :cl :arnesi :lift)
-  (:export #:+word-marker+
-           #:trie
-           #:key
-           #:width
-           #:branches
-           #:make-node
-           #:make-leaf
-           #:make-trie
-           #:make-word-trie
-           #:trie-key
-           #:trie-width
-           #:trie-branches
-           #:leafp
-           #:only-terminal-p
-           #:wordp
-           #:nodes-equalp
-           #:add
-           #:add-seqs
-           #:add-seqs-as-keys
-           #:add-subseqs
-           #:find-key
-           #:obtain-seq
-           #:sort-trie
-           #:sort-trie-branch
-           #:test-trie
-           #:trie-prob
-           #:print-words
-           #:traverse2))
+  (:export
+   #:+word-marker+
+   #:add
+   #:add-seqs
+   #:add-seqs-as-keys
+   #:add-subseqs
+   #:branches
+   #:find-key
+   #:key
+   #:leafp
+   #:make-leaf
+   #:make-node
+   #:make-trie
+   #:make-word-trie
+   #:nodes-equalp
+   #:obtain-seq
+   #:only-terminal-p
+   #:print-words
+   #:sort-trie
+   #:sort-trie-branch
+   #:test-trie
+   #:traverse
+   #:trie
+   #:trie-branches
+   #:trie-key
+   #:trie-prob
+   #:trie-width
+   #:width
+   #:wordp
+   ))
 
 (in-package #:nu.composed.btrie)
 
@@ -72,23 +74,23 @@
 (setq *print-circle* nil)
 (setq *print-level* 12)
 
-(defparameter +word-marker+ #\t) ; SBCL + swank causes problems with UTF-8 with bullets
+(defparameter +word-marker+ #\.) ; SBCL + swank causes problems with UTF-8 with bullets
 (defparameter *debug* nil)
 
+
 ;;; Initialization
-;;;
-;;; With struct, trie nodes occupy (without contents):
-;;; Struct:       8 bits for each slot (24 bits)
-;;; (with contents:   + 16 bits for 1-char key = 40 bits)
-;;;
-;;; Alternative implementation could use lists, arrays or objects:
-;;; Linked cons cells:  3 * cons (8 bits) = 24 bits
-;;; Class:        16 for class, 20 for vector = 36 bits
+;;
+;; With struct, trie nodes occupy (without contents):
+;; Struct:              8 bits for each slot (24 bits)
+;; (with contents:   + 16 bits for 1-char key = 40 bits)
+;;
+;; Alternative implementation could use lists, arrays or objects:
+;; Linked cons cells:       3 * cons (8 bits) = 24 bits
+;; Class:         16 for class, 20 for vector = 36 bits
 
 (defclass trie ()
   ((key
-    ;; Type could be character or char for strings
-    :type atom ; atom is equal to (not cons)
+    :type atom ; equal to (not cons)
     :initform ""
     :reader key
     :initarg :key
@@ -99,12 +101,12 @@
     :accessor width
     :initarg :width)
    (branches
-    ;; Type could a vector, but it complicates things!
     :type list
     :initform nil
     :accessor branches
     :initarg :branches))
   (:documentation "Trie data structure, see package documentation for more info."))
+
 
 (defun make-node (&key (key "") (width 0) (branches nil) (leaf nil))
   "Utility function to make a trie instance."
@@ -131,6 +133,7 @@
     (add-seqs-as-keys r seqs)
     r))
 
+
 ;;; Predicates
 
 (defun leafp (node)
@@ -151,6 +154,7 @@
    (equal (key a) (key b))
    (equal (width a) (width b))
    (equal (branches a) (branches b))))
+
 
 ;;; Retrieval
 
@@ -185,8 +189,7 @@
                   and w = (width b)
                   until (equal k key) summing w)
             (width trie))))
-  ; Same cum-sum loop for assoc lists:
-  ; (loop for (k . v) in al until (equal #\b key) summing v))
+
 
 ;;; Insertion
 
@@ -264,27 +267,6 @@
       (when (equal 0 (width node))
         (remove-node node key)))))
 
-; Does not work
-; (defun remove-seq (trie seq &optional (count 1))
-;   "### Remove a sequence from trie"
-;   (unless (obtain-seq trie seq)
-;     (return-from remove-seq nil))
-;   (decf (width trie) (max count 1))
-;   (when (zerop (length seq))
-;     (return-from remove-seq trie))
-;   ; Use loop instead of recursion?
-;   (let ((symbol (find-key trie (elt seq 0))))
-;     (if symbol
-;       (when (= count (width symbol))
-;         ; Remove subtrie
-;         (setf (branches r)
-;             (delete #\b (branches r)
-;             :test #'equal
-;             :key (lambda (n) (key n))))
-;         (remove-key trie (elt seq 0))
-;         (return-from remove-seq nil))
-;       (remove-seq symbol (subseq seq 1) count)))
-
 
 ;;; Probabilities
 
@@ -296,6 +278,7 @@
 
 
 ;;; Sorting
+
 (defun sort-trie (trie predicate &rest args)
   "Sort a trie recursively with a predicate function."
   (let ((root trie))
@@ -315,21 +298,20 @@
 
 
 ;;; Traversal & printing
-;;;
-;;; Example of trie representation, for trie ROOT -> a -> (n s):
-;;; ("" 2
-;;;   (a 2
-;;;     (s 1 •)
-;;;     (n 1 •)))
-;;;
-;;; Or with raw argument:
-;;; ("" 2 (a 2 (s 1 (T 1)) (n 1 (T 1))))
-
-;; TODO Sliding window macro!
+;;
+;; Example of trie representation, for words '(as an) ie. root -> a -> (n s):
+;;
+;; ("" 2
+;;   (a 2
+;;     (s 1 .)
+;;     (n 1 .)))
+;;
+;; Or when compact is true:
+;; ("" 2 (a 2 (s 1 (T 1)) (n 1 (T 1))))
 
 (defun print-words (trie &optional (stream t) (prefix ""))
   ; Could use more arguments: start end &key (with-count))
-  "# Prints words from the trie, one per line.
+  "Prints words from the trie, one per line. Returns total word count.
 
   Options:
   * with-count: Prints word counts after tab when over one.
@@ -337,30 +319,21 @@
   TODO:
   * Use keyword arguments?
   * Implement start, end
-  * Allow to specify separator insted of newline"
+  * Allow to specify separator instead of newline"
 
   (when (leafp trie)
     (let ((width (width trie)))
-      ; Print the word and count if not in '(0 1).
-      ; Logand changes 1 and 0 to 0 (and changes -1 to -2,
-      ; but that’s not the point).
+      ;; Print the word and it's count, if the count is not 0 or 1.
+      ;; Logand makes 1 or 0 => 0 to suppress printing.
       (format t "~A~:[~;~10t~d~]~%" prefix (/= 0 (logand -2 width)) width))
     (return-from print-words))
+
   (loop as branch in (branches trie) do
     (print-words branch stream
       (concatenate 'string prefix (format nil "~A" (key trie)))))
+
   (when (equal "" (key trie))
     (width trie)))
-
-; (defmethod print-object ((trie trie) stream)
-;   ; (when *print-pretty* (format stream "~&~v@T" 2))
-;   (format stream "(~A ~d" (key trie) (width trie))
-;   (unless (leafp trie)
-;     (loop as branch in (branches trie) do
-;       (write-char #\Space stream)
-;       (write branch :stream stream)))
-;   (format stream ")")
-;   (when (leafp trie) (format stream "~%")))
 
 (defun print-trie-simple (trie &optional (stream t) (depth 0) (indent 2))
   "## Traverse tries printing out nodes"
@@ -370,42 +343,6 @@
     (loop as branch in (branches trie) do
       (print-trie-simple branch stream (+ 1 depth) indent)))
   (format stream ")"))
-
-(defun print-list-trie (trie &optional (stream t) (compact t))
-  "Pretty print the trie. Works when structure type is list."
-  (pprint-logical-block (*standard-output* trie :prefix "(" :suffix ")")
-    (let ((*print-miser-width* nil)   ; Miser mode disables pprint-indent!
-          (key (pprint-pop)))
-      ; Print key
-      (cond
-        ((equal t key)    (write-char +word-marker+))
-        ((characterp key) (write-char key))
-        (t                (write key)))
-      (write-char #\Space)
-      (pprint-indent :current 0)
-
-      ; Print width
-      (write (pprint-pop))
-
-      ; Word ending
-      (when (and compact (wordp trie))
-        (write-char #\Space)
-        (write-char +word-marker+))
-
-      ; Branches
-      (let ((branches (pprint-pop)))
-        (when branches
-            (loop as branch in branches do
-              (unless (equal compact (car branch))    ; Else previous level
-                (when *debug* (write :^))
-                (write-char #\Space)                  ; Space before branches
-                (unless (only-terminal-p trie)
-                  (pprint-newline :mandatory))        ; Newline after leaf
-                (pprint-indent :current 0)
-                (print-list-trie branch stream compact)   ; Next level
-                (when *debug* (write :*)))
-                (when *debug* (write :$)))
-        (pprint-exit-if-list-exhausted))))))
 
 (defmethod print-object ((trie trie) stream)
   (print-trie-to-stream trie stream))
@@ -442,7 +379,7 @@
          (write-char #\) )))) ; <- Right Parenthesis character!
 
 (defmethod traverse ((trie trie) (fun function) &key (do-leafs nil))
-  "Traverse the trie perfoming function on each node."
+  "Traverse the trie perfoming a function on each node."
   (when (leafp trie)
     (return-from traverse (when do-leafs (funcall fun trie))))
   (loop as node in (branches trie) do
