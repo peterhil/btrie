@@ -57,3 +57,23 @@
      (obtain-seq tr "banana")
      (make-node :key #\a :width 1 :branches (list (make-leaf)))
      :test #'nodes-equalp)))
+
+
+;;; Printing
+
+(lift:deftestsuite btrie-traversal-and-printing (btrie-tests)
+  ())
+
+(lift:deftestsuite test-print-words (btrie-traversal-and-printing)
+  ())
+
+(lift:addtest (test-print-words)
+  print-to-stream
+  (let ((tr (make-trie *banana*)))
+    (ensure-same
+     (with-output-to-string (std-out-stream)
+       (let ((*standard-output* std-out-stream))
+	 (print-words tr)))
+     (with-output-to-string (user-supplied-stream)
+       (print-words tr user-supplied-stream))
+     :test #'string=)))
