@@ -153,7 +153,7 @@
   (and
    (equal (key a) (key b))
    (equal (width a) (width b))
-   (equal (branches a) (branches b))))
+   (every #'nodes-equalp (branches a) (branches b))))
 
 
 ;;; Retrieval

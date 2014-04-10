@@ -35,11 +35,11 @@
 
 (lift:addtest (test-nodes-equalp)
   leaf-nodes
-  (ensure-same (make-leaf) (make-leaf)))
+  (ensure-same (make-leaf) (make-leaf) :test #'nodes-equalp))
 
 (lift:addtest (test-nodes-equalp)
   empty-tries
-  (ensure-same (make-trie) (make-trie)))
+  (ensure-same (make-trie) (make-trie) :test #'nodes-equalp))
 
 
 ;;; Retrieval
@@ -53,9 +53,7 @@
 (lift:addtest (test-obtain-seq)
   simple-lookup
   (let ((tr (make-trie *banana*)))
-    (with-slots ((k key) (w width) (b branches))
-        (let ((result-node ))
-          (ensure-same 
-           (obtain-seq tr "banana")
-           (make-node :key #\a :width 1 :branches (list (make-leaf)))
-           :test #'nodes-equalp)))))
+    (ensure-same 
+     (obtain-seq tr "banana")
+     (make-node :key #\a :width 1 :branches (list (make-leaf)))
+     :test #'nodes-equalp)))
