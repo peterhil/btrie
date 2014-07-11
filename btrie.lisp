@@ -153,7 +153,7 @@
   (and
    (equal (key a) (key b))
    (equal (width a) (width b))
-   (equal (branches a) (branches b))))
+   (every #'nodes-equalp (branches a) (branches b))))
 
 
 ;;; Retrieval
@@ -325,7 +325,7 @@
     (let ((width (width trie)))
       ;; Print the word and it's count, if the count is not 0 or 1.
       ;; Logand makes 1 or 0 => 0 to suppress printing.
-      (format t "~A~:[~;~10t~d~]~%" prefix (/= 0 (logand -2 width)) width))
+      (format stream "~A~:[~;~10t~d~]~%" prefix (/= 0 (logand -2 width)) width))
     (return-from print-words))
 
   (loop as branch in (branches trie) do
